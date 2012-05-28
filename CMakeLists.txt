@@ -1,14 +1,21 @@
 ## Project Setup
 cmake_minimum_required(VERSION 2.4.6)
 
+if(COMMAND cmake_policy)
+    cmake_policy(SET CMP0003 NEW)
+endif(COMMAND cmake_policy)
+
+# Use clang if available
+IF(EXISTS /usr/bin/clang)
+	set(CMAKE_CXX_COMPILER /usr/bin/clang++)
+	set(CMAKE_OSX_DEPLOYMENT_TARGET "")
+	set(SERIAL_BUILD_WARNINGS TRUE)
+	set(CMAKE_BUILD_TYPE Debug)
+ENDIF(EXISTS /usr/bin/clang)
+
 project(indoor_navigation)
 
 ## Configurations
-
-# Use clang if available
-IF(EXISTS /usr/bin/clang++)
-  set(CMAKE_CXX_COMPILER /usr/bin/clang++)
-ENDIF(EXISTS /usr/bin/clang++)
 
 # Allow for building shared libs override
 IF(NOT BUILD_SHARED_LIBS)

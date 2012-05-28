@@ -1,8 +1,17 @@
+#include <iostream>
+
 #include "cas_line_extraction/cas_line_extraction.h"
 using namespace cas_line_extraction;
+using namespace Eigen;
 
 
 LineExtractor::LineExtractor() {
+    // initialize parameters
+    // assume initially that lidar data goes from -90 to 90 degrees
+    // with a 1 degree resolution
+    this->lidar_angle_min_ = -PI/2;
+    this->lidar_angle_max_ = PI/2;
+    this->lidar_angle_increment_ = 1*PI/180;
 
 }
 
@@ -10,22 +19,153 @@ LineExtractor::~LineExtractor() {
 
 }
 
-void LineExtractor::ExtractLines(VectorXd scan) {
+void LineExtractor::GenerateAngleVector(double angle_min, double angle_max, double angle_increment) {
+    // set the minimum and maximum angle as well as the distribution in the object
+    this->lidar_angle_min_= angle_min;
+    this->lidar_angle_max_= angle_max;
+    this->lidar_angle_increment_= angle_increment;
+    // use the parameters just set to generate a vector of angles that correspond to each scan measurement
+    FillLidarAngles();
+}
 
-	unsigned int num_of_scan_points;
+void LineExtractor::GenerateNoiseVector(double noise_std_deviation) {
+    this->lidar_noise_std_dev_=noise_std_deviation;
+    FillLidarNoiseVector();
+}
 
-//  stdrho = ones(length(phi),1)*stdrho;
-//  scan = [phi, rho, stdrho];
-//  l = size(scan,1);
-//
-//
-//  % ---------------------------------------------------------- %
-//  %%%%%%%%%%% Slide Window And Fit Lines --> alpharC %%%%%%%%%%%
-//  % ---------------------------------------------------------- %
-//  halfWin = (winsize-1)/2;
-//  ibeg = 1 + ~cyc*halfWin;
-//  iend = l - ~cyc*halfWin;
-//  windowvec = ibeg:iend;
+void LineExtractor::SetParameters(	unsigned int window_size, double threshold_fidelity,
+    double fusion_alpha, double minimum_length) {
+    window_size_=window_size;
+    threshold_fidelity_=threshold_fidelity;
+    fusion_alpha_=fusion_alpha;
+    minimum_length_=minimum_length;
+    compensation_a_=0;
+    compesnation_r_=0;
+}
+
+void LineExtractor::FillLidarAngles() {
+    // set the number of points in the scan based on the min,max range and increment value
+    number_of_scan_points_=(lidar_angle_max_-lidar_angle_min_)/(lidar_angle_increment_)+1;
+    lidar_angles_ = VectorXd(number_of_scan_points_); // create vector to fill
+
+    // initialize the angle with its minimum value
+    double curAngle=lidar_angle_min_;
+    int index=0;  // index into array of angles
+    // fill in an angle measurement that corresponds to each scan measurement
+    while(curAngle<=lidar_angle_max_) {
+        lidar_angles_[index++]=curAngle;
+        curAngle+=lidar_angle_increment_;
+    }
+
+}
+
+void LineExtractor::FillLidarNoiseVector() {
+    // create vector of noise standard deviations
+    lidar_noise_vector_ = VectorXd(number_of_scan_points_);
+
+    // fill in each entry with constant standard deviation value
+    for (size_t ii=0; ii<number_of_scan_points_; ii++) {
+        lidar_noise_vector_[ii]=this->lidar_noise_std_dev_;
+    }
+}
+
+void LineExtractor::FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, Eigen::VectorXd noise,
+                  Eigen::VectorXd &parameters, Eigen::MatrixXd &covariance)
+{
+    // Transform polar to cartesian
+    VectorXd costvec = theta.array().cos();
+    VectorXd sintvec = theta.array().sin();
+    std::cout << costvec << std::endl;
+    VectorXd xx = range.array() * costvec.array();
+    VectorXd yy = range.array() * sintvec.array();
+
+    //xy(:,1) = x(:,2).*costvec;
+    //xy(:,2) = x(:,2).*sintvec;
+
+    // generate sum of the weights (weights are inverse of noise)
+    Array3d weight_squared = noise.array().inverse().square();
+    double sum_of_weights = (weight_squared.sum());
+    double xmw = (weight_squared*xx.array()).sum()/sum_of_weights;
+    double ymw = (weight_squared*yy.array()).sum()/sum_of_weights;
+
+//    sum_weights = sum(x(:,3).^-2);
+//    xmw = sum(x(:,3).^-2 .* xy(:,1)) / sum_weights;
+//    ymw = sum(x(:,3).^-2 .* xy(:,2)) / sum_weights;
+
+    // alpha
+    //Vector3d numerator
+
+//    % alpha
+//    nom   = -2*sum(x(:,3).^-2.* (xy(:,1) - xmw)   .* (xy(:,2) - ymw)    );
+//    denom =    sum(x(:,3).^-2.*((xy(:,2) - ymw).^2 - (xy(:,1) - xmw).^2));
+//    alpha = 0.5 * atan2(nom,denom);
+
+//    % r
+//    r = xmw*cos(alpha) + ymw*sin(alpha);
+
+//    % Eliminate negative radii
+//    if r < 0,
+//      alpha = alpha + pi;
+//      r = -r;
+//    end;
+//    p(1,1) = alpha;
+//    p(2,1) = r;
+
+//    % Computing the WEIGHTED COVARIANCE MATRIX C %
+//    N = nom; D = denom;
+//    dr_dalpha = ymw*cos(alpha) - xmw*sin(alpha);
+//    w_i = x(:,3).^-2;
+
+//    % sigma_aa vectorized %
+//    dN_drhoi_v = 2*w_i.*(xmw*sintvec + ymw*costvec - x(:,2).*sin(2*x(:,1)));
+//    dD_drhoi_v = 2*w_i.*(xmw*costvec - ymw*sintvec - x(:,2).*cos(2*x(:,1)));
+//    sigma_aa_v = sum((D*dN_drhoi_v - N*dD_drhoi_v).^2.*x(:,3).^2) / (2*(N^2 + D^2))^2;
+
+//    % sigma_rr vectorized %
+//    dalpha_drhoi_v = (D*dN_drhoi_v - N*dD_drhoi_v)./(2*(N^2 + D^2));
+//    sigma_rr_v = sum((dalpha_drhoi_v.*dr_dalpha + w_i.*cos(x(:,1)-alpha)/sum_weights).^2.*x(:,3).^2);
+
+//    % sigma_ar vectorized %
+//    dr_drhoi_v = dalpha_drhoi_v*dr_dalpha + w_i.*cos(x(:,1)-alpha)/sum_weights;
+//    sigma_ar_v = sum(dalpha_drhoi_v.*dr_drhoi_v.*x(:,3).^2);
+
+//    C(1,1) = sigma_aa_v;
+//    C(1,2) = sigma_ar_v;
+//    C(2,1) = sigma_ar_v;
+//    C(2,2) = sigma_rr_v;
+
+
+}
+
+
+void LineExtractor::ExtractLines(ArrayXd scan) {
+
+//----------------------------------------------------------
+//   Slide Window And Fit Lines --> alpharC
+//----------------------------------------------------------
+    unsigned int half_window = (window_size_-1)/2;
+    // should be 5 to 177 for 181 scan points with window_size=9
+    int i_begin=half_window;
+    int i_end=number_of_scan_points_-half_window-1;
+    // vectors to hold values for current window
+    VectorXd scan_window(window_size_);
+    VectorXd theta_window(window_size_);
+    VectorXd noise_window(window_size_);
+    VectorXd parameters;
+    MatrixXd covariance;
+    // i_mid is index of midpoint of current sliding window
+    for (int i_mid=i_begin; i_mid<=i_end;i_mid++) {
+        // start point in scan
+        int window_start=i_mid-half_window;
+        // get current window
+        scan_window=scan.segment(window_start, window_size_);
+        theta_window=lidar_angles_.segment(window_start, window_size_);
+        std::cout << lidar_noise_vector_.rows() << std::endl;
+        noise_window=lidar_noise_vector_.segment(window_start, window_size_);
+        //std::cout << scan_window << std::endl;
+        FitLinePolar(scan_window, theta_window, noise_window, parameters, covariance);
+
+    }
 //  for imid = windowvec,
 //    for j = imid-halfWin:imid+halfWin,
 //      k = mod(j-1,l) + 1;

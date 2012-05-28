@@ -23,11 +23,15 @@
 #ifndef LINEEXTRACTOR_H
 #define LINEEXTRACTOR_H
 
-#include <eigen3/Eigen/Dense>
+//#define EIGEN2_SUPPORT
+//#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Core>
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
 namespace cas_line_extraction {
+
+#define PI  3.14159265
 
 
 class LineExtractor {
@@ -35,13 +39,20 @@ public:
 	LineExtractor();
 	~LineExtractor();
 
-	void ExtractLines(VectorXd scan);
+    void ExtractLines(Eigen::ArrayXd scan);
+    void GenerateAngleVector(double angle_min, double angle_max, double angle_increment);
+    void GenerateNoiseVector(double noise_std_deviation);
+    void SetParameters(	unsigned int window_size, double threshold_fidelity,
+        double fusion_alpha, double minimum_length);
 
 private:
 	//! Generates a range of angles for lidar data based on current parameters
 	void FillLidarAngles();
 	//! Generates a vector of repeated values of the lidar noise standard deviation
 	void FillLidarNoiseVector();
+
+    void FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, Eigen::VectorXd noise,
+                     Eigen::VectorXd &parameters, Eigen::MatrixXd &covariance);
 
 
 	////////////////////////////////////////////////////////
@@ -53,7 +64,6 @@ private:
 	double minimum_length_;		//!< minimum length to accept a segment [m]
 	double compensation_a_;		//!< compensation factor for angle [rad]
 	double compesnation_r_;		//!< compensation factor for distance [m]
-	bool cyclic_;				//!< are the scans cyclic?
 
 
 	////////////////////////////////////////////////////////
@@ -63,9 +73,10 @@ private:
 	double lidar_angle_max_;	//!< lidar maximum angle [rad]
 	double lidar_angle_increment_; //!< angular resolution [rad]
 	double lidar_noise_std_dev_;	//!< standard deviation of lidar noise (1-sigma) [m]
+    size_t number_of_scan_points_;      //!< number of points in one scan, calculated from angle parameters
 
-	VectorXd lidar_noise_vector_; //!< vector of noise std deviation [m]
-	VectorXd lidar_angles_; 	  //!< vector of angles corresponding to lidar measurements [rad]
+    Eigen::VectorXd lidar_noise_vector_; //!< vector of noise std deviation [m]
+    Eigen::VectorXd lidar_angles_; 	  //!< vector of angles corresponding to lidar measurements [rad]
 };
 
 }
