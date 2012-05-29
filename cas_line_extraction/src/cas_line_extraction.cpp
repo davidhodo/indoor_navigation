@@ -72,41 +72,43 @@ void LineExtractor::FillLidarNoiseVector() {
 void LineExtractor::FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, Eigen::VectorXd noise,
                   Eigen::VectorXd &parameters, Eigen::MatrixXd &covariance)
 {
+
+    //FITLINEPOLAR Fit alpha,r line to points in polar coordinates.
+    //   [X,C] = FITLINEPOLAR(P) fits a line in the weighted least squares
+    //   sense to points P in polar coordinates minimizing perpendicular
+    //   errors from the points to the line. Uncertainties in rho are
+    //   assumed and propagated through the fit expressions yielding the
+    //   parameter covariance matrix C. P is a nx3 matrix with n>=3 with
+    //   theta in the first column, rho in the second column and sigma rho
+    //   in the third column. The function returns the parameter vector
+    //   X = [alpha; r] and the covariance matrix C = [saa sar; sar srr].
+    //
+    //   Reference (contains derivation of fit expressions):
+    //      K.O. Arras, "Feature-Based Robot Navigation in Known and Unknown
+    //      Environments", Ph.D. dissertation, Nr. 2765, Swiss Federal Insti-
+    //      tute of Technology Lausanne, Autonomous Systems Lab, June 2003.
+
     // Transform polar to cartesian
     VectorXd costvec = theta.array().cos();
     VectorXd sintvec = theta.array().sin();
- //   std::cout << "costvec:\n" << costvec << std::endl;
-  //  std::cout << "range: \n" << range << std::endl;
     VectorXd xx = range.array() * costvec.array();
     VectorXd yy = range.array() * sintvec.array();
 
-  //  std::cout << "xx: \n" << xx << std::endl;
-  //  std::cout << "yy: \n" << yy << std::endl;
-
-    // generate sum of the weights (weights are inverse of noise)
- //   std::cout << "noise:\n" << noise.array().inverse().square() << std::endl;
-  //  std::cout << "noise:\n" << noise.array().inverse().square().rows() << std::endl;
-
     VectorXd weight_squared = noise.array().inverse().square();
-  //  std:: cout << "weight_squared:" << weight_squared << std::endl;
     double sum_of_weights = (weight_squared.sum());
- //   std::cout << sum_of_weights << std::endl;
     double xmw = (weight_squared.array()*xx.array()).sum()/sum_of_weights;
     double ymw = (weight_squared.array()*yy.array()).sum()/sum_of_weights;
-  //  std::cout << "xmw=" << xmw << "  ymw=" << ymw << std::endl;
 
     // alpha
     ArrayXd tempXX=xx.array() - xmw;
     ArrayXd tempYY=yy.array() - ymw;
     double numerator = -2*((weight_squared.array()*tempXX*tempYY).sum());
     double denominator = (weight_squared.array()*(tempYY.square()-tempXX.square())).sum();
-  //  std::cout << "numerator=" << numerator << "  denominator=" << denominator << std::endl;
     // calculate angle
     double alpha = 0.5*atan2(numerator,denominator);
 
     // calculate radius
     double radius = xmw*cos(alpha) + ymw*sin(alpha);
-
 
     // Eliminate negative radii (change angle by 180 degrees)
     if (radius<0)
@@ -126,17 +128,8 @@ void LineExtractor::FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, E
     ////////////////////////////////////////////////////////////
     double dradius_dalpha=ymw*cos(alpha) - xmw*sin(alpha);
 
-//    dr_dalpha = ymw*cos(alpha) - xmw*sin(alpha);
-//    w_i = x(:,3).^-2; = weigth_squared
-
-    // sigma_aa vectorized //
-    // ArrayXd tempDn = 2*range.array()*theta.array().sin();
-    //ArrayXd tempDn = 2*range.array()*theta.array().sin();
-
     ArrayXd dN_drhoi_v = 2*weight_squared.array()*(xmw*sintvec.array()+ymw*costvec.array()-range.array()*(2*theta.array()).sin());
     ArrayXd dD_drhoi_v = 2*weight_squared.array()*(xmw*costvec.array()-ymw*sintvec.array()-range.array()*(2*theta.array()).cos());
- //   std::cout << "dN:\n" << dN_drhoi_v << std::endl;
- //   std::cout << "dD:\n" << dD_drhoi_v << std::endl;
 
     double temp_div=2*(numerator*numerator+denominator*denominator);
     double sigma_aa_v=(((denominator*dN_drhoi_v - numerator*dD_drhoi_v).square()*noise.array().square()).sum()) /
@@ -145,7 +138,7 @@ void LineExtractor::FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, E
     ArrayXd dalpha_drhoi_v = (denominator*dN_drhoi_v - numerator*dD_drhoi_v)/temp_div;
     double sigma_rr_v = ((dalpha_drhoi_v*dradius_dalpha+weight_squared.array()*cos(theta.array()-alpha)/sum_of_weights).square()*noise.array().square()).sum();
 
-//    % sigma_ar vectorized %
+    //    % sigma_ar vectorized %
     ArrayXd dr_drhoi_v = dalpha_drhoi_v*dradius_dalpha+weight_squared.array()*(theta.array()-alpha).cos()/sum_of_weights;
     double sigma_ar_v = (dalpha_drhoi_v*dr_drhoi_v*noise.array().square()).sum();
 
@@ -155,8 +148,8 @@ void LineExtractor::FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, E
     covariance(1,0)=sigma_ar_v;
     covariance(1,1)=sigma_rr_v;
 
-    std::cout << "parameters:\n" << parameters << std::endl;
-    std::cout << "covariance:\n" << covariance << std::endl;
+    //std::cout << "parameters:\n" << parameters << std::endl;
+    //std::cout << "covariance:\n" << covariance << std::endl;
 }
 
 
