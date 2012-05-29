@@ -51,6 +51,14 @@ private:
 	//! Generates a vector of repeated values of the lidar noise standard deviation
 	void FillLidarNoiseVector();
 
+    /*!
+     * Calculates polar line paramters (alpha and radius) for a line
+     * fit to the given lidar data using total weighted least squares.
+     * A covariance matrix for the fit parameters is also calcualted
+     * from the known lidar data std deviations.
+     *
+     * parameters[0]=alpha, parameters[1]=radius
+     */
     void FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, Eigen::VectorXd noise,
                      Eigen::VectorXd &parameters, Eigen::MatrixXd &covariance);
 

@@ -75,66 +75,88 @@ void LineExtractor::FitLinePolar(Eigen::VectorXd range, Eigen::VectorXd theta, E
     // Transform polar to cartesian
     VectorXd costvec = theta.array().cos();
     VectorXd sintvec = theta.array().sin();
-    std::cout << costvec << std::endl;
+ //   std::cout << "costvec:\n" << costvec << std::endl;
+  //  std::cout << "range: \n" << range << std::endl;
     VectorXd xx = range.array() * costvec.array();
     VectorXd yy = range.array() * sintvec.array();
 
-    //xy(:,1) = x(:,2).*costvec;
-    //xy(:,2) = x(:,2).*sintvec;
+  //  std::cout << "xx: \n" << xx << std::endl;
+  //  std::cout << "yy: \n" << yy << std::endl;
 
     // generate sum of the weights (weights are inverse of noise)
-    Array3d weight_squared = noise.array().inverse().square();
-    double sum_of_weights = (weight_squared.sum());
-    double xmw = (weight_squared*xx.array()).sum()/sum_of_weights;
-    double ymw = (weight_squared*yy.array()).sum()/sum_of_weights;
+ //   std::cout << "noise:\n" << noise.array().inverse().square() << std::endl;
+  //  std::cout << "noise:\n" << noise.array().inverse().square().rows() << std::endl;
 
-//    sum_weights = sum(x(:,3).^-2);
-//    xmw = sum(x(:,3).^-2 .* xy(:,1)) / sum_weights;
-//    ymw = sum(x(:,3).^-2 .* xy(:,2)) / sum_weights;
+    VectorXd weight_squared = noise.array().inverse().square();
+  //  std:: cout << "weight_squared:" << weight_squared << std::endl;
+    double sum_of_weights = (weight_squared.sum());
+ //   std::cout << sum_of_weights << std::endl;
+    double xmw = (weight_squared.array()*xx.array()).sum()/sum_of_weights;
+    double ymw = (weight_squared.array()*yy.array()).sum()/sum_of_weights;
+  //  std::cout << "xmw=" << xmw << "  ymw=" << ymw << std::endl;
 
     // alpha
-    //Vector3d numerator
+    ArrayXd tempXX=xx.array() - xmw;
+    ArrayXd tempYY=yy.array() - ymw;
+    double numerator = -2*((weight_squared.array()*tempXX*tempYY).sum());
+    double denominator = (weight_squared.array()*(tempYY.square()-tempXX.square())).sum();
+  //  std::cout << "numerator=" << numerator << "  denominator=" << denominator << std::endl;
+    // calculate angle
+    double alpha = 0.5*atan2(numerator,denominator);
 
-//    % alpha
-//    nom   = -2*sum(x(:,3).^-2.* (xy(:,1) - xmw)   .* (xy(:,2) - ymw)    );
-//    denom =    sum(x(:,3).^-2.*((xy(:,2) - ymw).^2 - (xy(:,1) - xmw).^2));
-//    alpha = 0.5 * atan2(nom,denom);
+    // calculate radius
+    double radius = xmw*cos(alpha) + ymw*sin(alpha);
 
-//    % r
-//    r = xmw*cos(alpha) + ymw*sin(alpha);
 
-//    % Eliminate negative radii
-//    if r < 0,
-//      alpha = alpha + pi;
-//      r = -r;
-//    end;
-//    p(1,1) = alpha;
-//    p(2,1) = r;
+    // Eliminate negative radii (change angle by 180 degrees)
+    if (radius<0)
+    {
+        alpha = alpha + PI;
+        radius=-radius;
+    }
 
-//    % Computing the WEIGHTED COVARIANCE MATRIX C %
-//    N = nom; D = denom;
+    // store line parameters in vector
+    parameters = VectorXd(2);
+    parameters[0]=alpha;
+    parameters[1]=radius;
+
+
+    ////////////////////////////////////////////////////////////
+    // Compute weighted covariance matrix
+    ////////////////////////////////////////////////////////////
+    double dradius_dalpha=ymw*cos(alpha) - xmw*sin(alpha);
+
 //    dr_dalpha = ymw*cos(alpha) - xmw*sin(alpha);
-//    w_i = x(:,3).^-2;
+//    w_i = x(:,3).^-2; = weigth_squared
 
-//    % sigma_aa vectorized %
-//    dN_drhoi_v = 2*w_i.*(xmw*sintvec + ymw*costvec - x(:,2).*sin(2*x(:,1)));
-//    dD_drhoi_v = 2*w_i.*(xmw*costvec - ymw*sintvec - x(:,2).*cos(2*x(:,1)));
-//    sigma_aa_v = sum((D*dN_drhoi_v - N*dD_drhoi_v).^2.*x(:,3).^2) / (2*(N^2 + D^2))^2;
+    // sigma_aa vectorized //
+    // ArrayXd tempDn = 2*range.array()*theta.array().sin();
+    //ArrayXd tempDn = 2*range.array()*theta.array().sin();
 
-//    % sigma_rr vectorized %
-//    dalpha_drhoi_v = (D*dN_drhoi_v - N*dD_drhoi_v)./(2*(N^2 + D^2));
-//    sigma_rr_v = sum((dalpha_drhoi_v.*dr_dalpha + w_i.*cos(x(:,1)-alpha)/sum_weights).^2.*x(:,3).^2);
+    ArrayXd dN_drhoi_v = 2*weight_squared.array()*(xmw*sintvec.array()+ymw*costvec.array()-range.array()*(2*theta.array()).sin());
+    ArrayXd dD_drhoi_v = 2*weight_squared.array()*(xmw*costvec.array()-ymw*sintvec.array()-range.array()*(2*theta.array()).cos());
+ //   std::cout << "dN:\n" << dN_drhoi_v << std::endl;
+ //   std::cout << "dD:\n" << dD_drhoi_v << std::endl;
+
+    double temp_div=2*(numerator*numerator+denominator*denominator);
+    double sigma_aa_v=(((denominator*dN_drhoi_v - numerator*dD_drhoi_v).square()*noise.array().square()).sum()) /
+            (temp_div*temp_div);
+
+    ArrayXd dalpha_drhoi_v = (denominator*dN_drhoi_v - numerator*dD_drhoi_v)/temp_div;
+    double sigma_rr_v = ((dalpha_drhoi_v*dradius_dalpha+weight_squared.array()*cos(theta.array()-alpha)/sum_of_weights).square()*noise.array().square()).sum();
 
 //    % sigma_ar vectorized %
-//    dr_drhoi_v = dalpha_drhoi_v*dr_dalpha + w_i.*cos(x(:,1)-alpha)/sum_weights;
-//    sigma_ar_v = sum(dalpha_drhoi_v.*dr_drhoi_v.*x(:,3).^2);
+    ArrayXd dr_drhoi_v = dalpha_drhoi_v*dradius_dalpha+weight_squared.array()*(theta.array()-alpha).cos()/sum_of_weights;
+    double sigma_ar_v = (dalpha_drhoi_v*dr_drhoi_v*noise.array().square()).sum();
 
-//    C(1,1) = sigma_aa_v;
-//    C(1,2) = sigma_ar_v;
-//    C(2,1) = sigma_ar_v;
-//    C(2,2) = sigma_rr_v;
+    covariance = MatrixXd(2,2);
+    covariance(0,0)=sigma_aa_v;
+    covariance(0,1)=sigma_ar_v;
+    covariance(1,0)=sigma_ar_v;
+    covariance(1,1)=sigma_rr_v;
 
-
+    std::cout << "parameters:\n" << parameters << std::endl;
+    std::cout << "covariance:\n" << covariance << std::endl;
 }
 
 
