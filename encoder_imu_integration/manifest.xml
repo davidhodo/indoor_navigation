@@ -1,0 +1,14 @@
+<package>
+  <description brief="Wheel Encoder/ IMU Integration">
+
+     Navigation filter for combining wheel encoder measurements
+     with an IMU (currently just a yaw gyro)
+
+  </description>
+  <author>David Hodo</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+
+</package>
+
+
